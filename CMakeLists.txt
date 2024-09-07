@@ -12,7 +12,7 @@ set(SEAL_DIR "C:/Users/user/Desktop/mpc/SEAL/build")
 find_package(SEAL REQUIRED PATHS ${SEAL_DIR})
 
 # 이 프로젝트의 실행 파일에 소스를 추가합니다.
-add_executable (bgv_modified "bgv_modified.cpp" "bgv_modified.h" "examples.h")
+add_executable (bgv_modified "main.cpp" "bgv_modified.h" "examples.h")
 
 # SEAL 라이브러리를 bgv_modified 프로젝트에 링크합니다. 이 줄을 추가하세요.
 target_link_libraries(bgv_modified PRIVATE SEAL::seal)
