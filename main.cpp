@@ -17,7 +17,7 @@ using namespace std;
 using namespace seal;
 
 
-string hashing_sha256(string& data) {
+string hashing_sha256(string data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
 
     SHA256_CTX sha256;
@@ -38,7 +38,7 @@ void pattern_matching_using_magnification(RandomGenerator& random_gen, vector<in
     /*
     * Create bgv seal
     */
-    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 4096, { 39, 30, 39 }, false)
+    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 4096, { 39, 30, 39 }, 40, false)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
@@ -105,10 +105,12 @@ void pattern_matching_using_magnification(RandomGenerator& random_gen, vector<in
 
 
 void pattern_matching_using_hashing(RandomGenerator& random_gen, vector<int64_t> text, vector<int64_t> pattern) {
+    //text = { 1, 1, -1, -1 };
+    //pattern = { 1, 1 };
     /*
     * Create bgv seal
     */
-    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 4096, { 39, 30, 39 }, false)
+    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 40 }, 35, false)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
@@ -116,70 +118,51 @@ void pattern_matching_using_hashing(RandomGenerator& random_gen, vector<int64_t>
 
 
     /*
-    * Create Magnification
+    * Get plain modulus value
     */
-    int64_t magnification = random_gen.get_integer(std::pow<int64_t, int64_t>(2, 4), std::pow<int64_t, int64_t>(2, 5));
-
-
-    /*
-    * Encode text (plain)
-    */
-    std::reverse(text.begin(), text.end());
-    for (auto& e : text) { e *= magnification; }
-    Plaintext text_plain = bgv_seal.encode(text);
+    int64_t p = bgv_seal.plain_modulus_value();
 
 
     /*
     * Encrypt pattern (cipher)
     */
-    Plaintext pattern_plain = bgv_seal.encode(pattern);
-    Ciphertext pattern_encrypted = bgv_seal.encrypt(pattern_plain);
-
-
-    /*
-    * Create reducer (plain)
-    */
-    vector<int64_t> reducers(text.size(), pattern.size() * magnification);
-    Plaintext reducers_plain = bgv_seal.encode(reducers);
-
-
-    /*
-    * Create adder (plain)
-    */
-    vector<int64_t> adders = random_gen.get_integer_vector(std::pow<int64_t, int64_t>(2, 4), std::pow<int64_t, int64_t>(2, 5), text.size());
-    Plaintext adders_plain = bgv_seal.encode(adders);
+    Ciphertext pattern_encrypt = bgv_seal.encrypt(bgv_seal.encode(pattern));
 
 
     /*
     * Calculate
     */
-    Ciphertext calc = bgv_seal.multiply(pattern_encrypted, text_plain);
-    calc = bgv_seal.sub(calc, reducers_plain);
-    calc = bgv_seal.add(calc, adders_plain);
+    int64_t a = random_gen.get_integer(1, p / 2);
+  
+    std::reverse(text.begin(), text.end());
+    for (auto& e : text) { e *= a; }
+    Plaintext text_plain = bgv_seal.encode(text);
+ 
+    Plaintext reducers_plain = bgv_seal.encode(vector<int64_t>(text.size(), pattern.size() * a));
+    vector<int64_t> r = random_gen.get_integer_vector(1, p / 2, text.size());
+    Plaintext adders_plain = bgv_seal.encode(r);
 
-    Plaintext decrypted_calc = bgv_seal.decrypt(calc);
-    vector<int64_t> calc_decoded = bgv_seal.decode(decrypted_calc);
-    calc_decoded.resize(text.size());
-
-
-    /*
-    * hashing
-    */
-    vector<string> ph;
-    for (auto& e : calc_decoded) {
-        string s = to_string(e);
-        ph.push_back(hashing_sha256(s));
+    vector<string> hash;
+    hash.reserve(text.size());
+    for (auto& e : r) {
+        hash.push_back(hashing_sha256(to_string(e)));
     }
+
+    Ciphertext result_encrypt = bgv_seal.multiply(pattern_encrypt, text_plain);
+    result_encrypt = bgv_seal.sub(result_encrypt, reducers_plain);
+    result_encrypt = bgv_seal.add(result_encrypt, adders_plain);
 
 
     /*
     * Find pattern in text
     */
     vector<int64_t> pl;
-    for (int i = 0; i < ph.size(); i++) {
-        string s = to_string(adders_plain[i]);
-        if (ph[i] != hashing_sha256(s)) continue;
-        pl.push_back((int64_t)text.size() - i - 1);
+    vector<int64_t> result = bgv_seal.decode(bgv_seal.decrypt(result_encrypt));
+
+    for (int i = 0; i < text.size(); i++) {
+        if (hashing_sha256(to_string(result[i])) == hash[i]) {
+            pl.push_back((int64_t)text.size() - i - 1);
+        } 
     }
 
     if (pl.empty()) {
@@ -194,59 +177,80 @@ void pattern_matching_using_hashing(RandomGenerator& random_gen, vector<int64_t>
 
 void pattern_matching_using_rotation( RandomGenerator& random_gen, vector<int64_t> text, vector<int64_t> pattern) {
     /*
+    * Create rotation steps
+    */
+    vector<int> steps;
+    for (int i = 1; i < pattern.size(); i <<= 1) {
+        steps.push_back(i);
+    }
+
+
+    /*
     * Create bgv seal
     */
-    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 4096, { 39, 30, 39 }, true)
+    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 35, true)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
-        .create_galois_keys({ -1 })
+        .create_galois_keys(steps)
         .build();
 
 
     /*
-    * Encrypt text (cipher)
+    * Get plain modulus value
     */
-    Plaintext text_plain = bgv_seal.encode(text);
-    Ciphertext text_encrypted = bgv_seal.encrypt(text_plain);
+    int64_t p = bgv_seal.plain_modulus_value();
 
 
     /*
     * Encrypt pattern (cipher)
     */
-    vector<int64_t> repeated_pattern;
-    for (int i = 0; i < text.size() / pattern.size(); i++) {
-        repeated_pattern.insert(repeated_pattern.end(), pattern.begin(), pattern.end());
+    vector<int64_t> pattern_repeat(text.size());
+
+    for (int64_t i = 0, j = 0; i < pattern_repeat.size(); ++i, (++j) %= pattern.size()) {
+        pattern_repeat[i] = pattern[j];
     }
-    Plaintext repeated_pattern_plain = bgv_seal.encode(repeated_pattern);
-    Ciphertext repeated_pattern_encrypted = bgv_seal.encrypt(repeated_pattern_plain);
+
+    Ciphertext pattern_cipher = bgv_seal.encrypt(bgv_seal.encode(pattern_repeat));
 
 
     /*
-    * Calculate & Find pattern in text
+    * Calculate
+    */
+    vector<Ciphertext> results;
+    Plaintext text_plain = bgv_seal.encode(text);
+
+    for (int r = 0; r < pattern.size(); r++, pattern_cipher = bgv_seal.rotate(pattern_cipher, 1)) {
+        // Multiply encrypted pattern with plain text: enc([p1, p2, ..., pn]) * [t1, t2, ..., tn]
+        Ciphertext result_cipher = bgv_seal.multiply(pattern_cipher, text_plain);
+
+        // Compute the range sum for result. If the part matches, it will result in 'n'
+        result_cipher = bgv_seal.range_sum(result_cipher, pattern.size());
+
+        // Subtract pattern length: -[n, n, ..., n]
+        result_cipher = bgv_seal.sub(result_cipher, bgv_seal.encode(vector<int64_t>(text.size(), pattern.size())));
+
+        // Multiply by random data: *[r1, r2, ..., rn]
+        result_cipher = bgv_seal.multiply(result_cipher, bgv_seal.encode(random_gen.get_integer_vector(1, p / 2, text.size())));
+        results.push_back(result_cipher);
+    }
+
+
+    /*
+    * Find pattern in text
     */
     vector<int64_t> pl;
 
     for (int r = 0; r < pattern.size(); r++) {
-        Ciphertext calc = bgv_seal.multiply(repeated_pattern_encrypted, text_encrypted);
-        Plaintext calc_decrypted = bgv_seal.decrypt(calc);
-        vector<int64_t> calc_decoded = bgv_seal.decode(calc_decrypted);
-        calc_decoded.resize(text.size());
+        Plaintext result_decrypted = bgv_seal.decrypt(results[r]);
+        vector<int64_t> result_decoded = bgv_seal.decode(result_decrypted);
+        //print_vector(result_decoded, text.size());
 
-        for (int i = r, sum = 0; i < calc_decoded.size(); i += pattern.size(), sum = 0) {
-            for (int j = 0; j < pattern.size(); j++) {
-                if (i + j < calc_decoded.size()) {
-                    sum += calc_decoded[i + j];
-                }
+        for (int i = 0; i < (int)text.size() - r; i += pattern.size()) {
+            if (i - r < 0) continue;
+            if (result_decoded[i - r] == 0) {
+                pl.push_back(i - r);
             }
-
-            if (sum == pattern.size()) {
-                pl.push_back(i);
-            }
-        }
-
-        if (r < (int)pattern.size() - 1) {
-            repeated_pattern_encrypted = bgv_seal.rotate(repeated_pattern_encrypted, -1);
         }
     }
 
@@ -259,6 +263,116 @@ void pattern_matching_using_rotation( RandomGenerator& random_gen, vector<int64_
     }
 }
 
+void pattern_matching_using_rotation_2(RandomGenerator& random_gen, vector<int64_t> text, vector<int64_t> pattern) {
+    //text = { 1, 1, -1, -1 };
+    //pattern = { 1, 1 };
+    /*
+    * Create bgv seal
+    */
+    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 40 }, 35, false)
+        .create_secret_key()
+        .create_public_key()
+        .create_relin_keys()
+        .build();
+
+
+    /*
+    * Get plain modulus value
+    */
+    int64_t p = bgv_seal.plain_modulus_value();
+
+
+    /*
+    * Encrypt pattern (cipher)
+    */
+    vector<int64_t> pattern_repeat(text.size());
+
+    for (int64_t i = 0, j = 0; i < pattern_repeat.size(); ++i, (++j) %= pattern.size()) {
+        pattern_repeat[i] = pattern[j];
+    }
+
+    Ciphertext pattern_cipher = bgv_seal.encrypt(bgv_seal.encode(pattern_repeat));
+
+
+    /*
+    * Calculate
+    */
+    vector<Ciphertext> results;
+    vector<vector<string>> hashes(pattern.size());
+    vector<int64_t> text_rotate(text.size());
+    vector<int64_t> g(pattern.size());
+    vector<int64_t> r;
+
+    for (int rot = 0; rot < pattern.size(); rot++) {
+        for (int64_t i = 0, j = 0; i < text_rotate.size(); ++i, (++j) %= pattern.size()) {
+            text_rotate[i] = text[(i + rot) % text.size()];
+        }
+
+        for (int64_t i = 0, involution = 1; i < g.size(); ++i, involution <<= 1) {
+            g[i] = involution;
+        }
+
+        r = random_gen.get_integer_vector(1, p / 2, text.size());
+        hashes[rot].reserve(text.size());
+        for (auto& e : r) {
+            hashes[rot].push_back(hashing_sha256(to_string(e)));
+            //cout << '(' << e << ", " << hashing_sha256(to_string(e)) << ')' << ' ';
+        }
+        //cout << '\n';
+
+        Plaintext text_plain = bgv_seal.encode(text_rotate);
+        Plaintext g_plain = bgv_seal.encode(g);
+        Plaintext r_plain = bgv_seal.encode(r);
+
+        //print_vector(bgv_seal.decode(bgv_seal.decrypt(pattern_cipher)), text.size());
+        //print_vector(bgv_seal.decode(text_plain), text.size());
+        //print_vector(bgv_seal.decode(g_plain), text.size());
+        //print_vector(bgv_seal.decode(r_plain), text.size());
+        //print_vector(hashes[rot], text.size());
+
+        // Subtract encrypted pattern with plain text: enc([p1, p2, ..., pn]) - [t1, t2, ..., tn]
+        Ciphertext result_cipher = bgv_seal.sub(pattern_cipher, text_plain);
+        //print_vector(bgv_seal.decode(bgv_seal.decrypt(result_cipher)), text.size());
+    
+        // Compute the range sum for result. If the part matches, it will result in '0'
+        result_cipher = bgv_seal.multiply(result_cipher, g_plain);
+        //print_vector(bgv_seal.decode(bgv_seal.decrypt(result_cipher)), text.size());
+
+        // Add random value.
+        result_cipher = bgv_seal.add(result_cipher, r_plain);
+        //print_vector(bgv_seal.decode(bgv_seal.decrypt(result_cipher)), text.size());
+
+        results.push_back(result_cipher);
+        //cout << "===================\n";
+    }
+
+
+    /*
+    * Find pattern in text
+    */
+    vector<int64_t> pl;
+
+    for (int rot = 0; rot < pattern.size(); rot++) {
+        vector<int64_t> result = bgv_seal.decode(bgv_seal.decrypt(results[rot]));
+        //print_vector(result, text.size());
+
+        for (int i = (int)pattern.size() - 1; i < (int)text.size() - rot; i += pattern.size()) {
+            //cout << '(' << i << ", " << result[i] << ", " << hashing_sha256(to_string(result[i])) << ')' << ' ';
+            if (hashing_sha256(to_string(result[i])) == hashes[rot][i]) {
+                pl.push_back((int64_t)i - pattern.size() + 1 + rot);
+            }
+        }
+        //cout << "===================\n";
+    }
+
+    if (pl.empty()) {
+        cout << endl << "    [ empty ]" << endl << endl;
+    }
+    else {
+        sort(pl.begin(), pl.end());
+        print_vector(pl, pl.size());
+    }
+}
 
 void testing_pattern_matching(const int text_size = 4096, const int pattern_size = 10) {
     cout << endl << "------------------ <Testing pattern matching : text size(" << text_size << "), pattern size(" << pattern_size << ")> ------------------" << endl << endl;
@@ -285,14 +399,16 @@ void testing_pattern_matching(const int text_size = 4096, const int pattern_size
     /*
     * Testing
     */
+    /*
     cout << "- pattern_matching_using_magnification" << endl;
     start = chrono::high_resolution_clock::now();
     pattern_matching_using_magnification(random_gen, text, pattern);
     end = chrono::high_resolution_clock::now();
     elapsed = end - start;
-    cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;
+    cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;*/
 
-    
+
+
     cout << "- pattern_matching_using_hashing" << endl;
     start = chrono::high_resolution_clock::now();
     pattern_matching_using_hashing(random_gen, text, pattern);
@@ -301,9 +417,18 @@ void testing_pattern_matching(const int text_size = 4096, const int pattern_size
     cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;
 
 
+
     cout << "- pattern_matching_using_rotation" << endl;
     start = chrono::high_resolution_clock::now();
     pattern_matching_using_rotation(random_gen, text, pattern);
+    end = chrono::high_resolution_clock::now();
+    elapsed = end - start;
+    cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;
+
+
+    cout << "- pattern_matching_using_rotation_2" << endl;
+    start = chrono::high_resolution_clock::now();
+    pattern_matching_using_rotation_2(random_gen, text, pattern);
     end = chrono::high_resolution_clock::now();
     elapsed = end - start;
     cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;
@@ -312,7 +437,22 @@ void testing_pattern_matching(const int text_size = 4096, const int pattern_size
 
 void main()
 {
-    for (auto& pattern_size : vector<int>{ 5, 10, 20, 30, 40, 50 }) {
-        testing_pattern_matching(4096, pattern_size);
+    for (auto& pattern_size : vector<int>{ 4, 8, 16, 32 }) {
+        testing_pattern_matching(8192, pattern_size);
     }
+
+/*    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, {40, 30, 30, 40}, 35, false)
+        .create_secret_key()
+        .create_public_key()
+        .create_relin_keys()
+        .build();
+
+
+    vector<int64_t> v1 = { 0, 0, 0, -16, 32, 64 };
+    vector<int64_t> v2 = { 0, 0, 0 };
+
+    Ciphertext c1 = bgv_seal.encrypt(bgv_seal.encode(v1));
+    Ciphertext c2 = bgv_seal.encrypt(bgv_seal.encode(v2));
+
+    print_vector(bgv_seal.decode(bgv_seal.decrypt(bgv_seal.multiply(c1, c2))), 10);*/
 }
