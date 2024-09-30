@@ -14,7 +14,7 @@ find_package(SEAL REQUIRED PATHS ${SEAL_DIR})
 find_package(OpenSSL REQUIRED)
 
 # 이 프로젝트의 실행 파일에 소스를 추가합니다.
-add_executable (bgv_modified "main.cpp" "bgv_modified.h" "examples.h" "modules/bgv/BGVBuilder.cpp" "modules/bgv/BGVSeal.cpp" "modules/bgv/BGVSeal.h" "modules/random/RandomGenerator.cpp" "modules/random/RandomGenerator.h")
+add_executable (bgv_modified "main.cpp" "examples.h" "bgv_modified.h" "modules/bgv/BGVBuilder.h" "modules/bgv/BGVBuilder.cpp" "modules/bgv/BGVSeal.h" "modules/bgv/BGVSeal.cpp" "modules/random/RandomGenerator.h" "modules/random/RandomGenerator.cpp" "modules/algorithm/Huffman.h" "modules/algorithm/Huffman.cpp")
 
 # 라이브러리를 프로젝트에 링크합니다. 이 줄을 추가하세요.
 target_link_libraries(bgv_modified PRIVATE SEAL::seal)
