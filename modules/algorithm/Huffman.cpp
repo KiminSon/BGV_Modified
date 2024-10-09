@@ -35,10 +35,10 @@ Huffman::Huffman(const std::vector<int64_t>& data) {
 
     create_mapping_table(root_, "", 0);
 
-    for (auto& e : mapping_table_) {
+    /*for (auto& e : mapping_table_) {
         std::cout << e.first<<' '<< e.second.first << '\n';
     }
-    std::cout << '\n';
+    std::cout << '\n';*/
 }
 
 Huffman::~Huffman() {

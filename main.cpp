@@ -458,7 +458,7 @@ void pattern_matching_6(RandomGenerator& random_gen, vector<int64_t> text, vecto
     /*
     * Create bgv seal
     */
-    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 40 }, 35, false)
+    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 35, false)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
@@ -478,10 +478,10 @@ void pattern_matching_6(RandomGenerator& random_gen, vector<int64_t> text, vecto
     auto [text_convert, text_data_loc] = huffman.encode(text);
     auto [pattern_convert, pattern_data_loc] = huffman.encode(pattern);
 
-    cout << text.size() << '\n';
-    cout << text_convert.size() << '\n';
-    cout << pattern.size() << '\n';
-    cout << pattern_convert.size() << '\n';
+    //cout << text.size() << '\n';
+    //cout << text_convert.size() << '\n';
+    //cout << pattern.size() << '\n';
+    //cout << pattern_convert.size() << '\n';
 
     //for (auto& e : text) cout << e << ' '; cout << '\n';
     //for (auto& e : text_data_loc) cout << e << ' '; cout << '\n';
@@ -517,6 +517,7 @@ void pattern_matching_6(RandomGenerator& random_gen, vector<int64_t> text, vecto
 
     Ciphertext result_encrypt = bgv_seal.multiply(pattern_encrypt, text_plain);
     result_encrypt = bgv_seal.sub(result_encrypt, bgv_seal.encode(vector<int64_t>(text.size(), (int64_t)pattern.size())));
+    result_encrypt = bgv_seal.multiply(result_encrypt, bgv_seal.encode(vector<int64_t>(1, random_gen.get_integer(1, p / 2))));
     result_encrypt = bgv_seal.add(result_encrypt, bgv_seal.encode(r));
 
 
@@ -545,6 +546,86 @@ void pattern_matching_6(RandomGenerator& random_gen, vector<int64_t> text, vecto
     }
 }
 
+void pattern_matching_7(RandomGenerator& random_gen, vector<int64_t> text, vector<int64_t> pattern) {
+    //text = { 1, 1, -1, -1 };
+    //pattern = { 1, 1 };
+    /*
+    * Create bgv seal
+    */
+    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 35, false)
+        .create_secret_key()
+        .create_public_key()
+        .create_relin_keys()
+        .build();
+
+
+    /*
+    * Get plain modulus value
+    */
+    int64_t p = bgv_seal.plain_modulus_value();
+
+
+    // w = 2793308228
+    vector<int64_t> w = { 1, 2793308228, -1, -2793308228 };
+
+
+    // mapping
+    map<int64_t, int64_t> mp = {
+        { 1, 0 },
+        { 2, 1 }, // 2 -> w^1
+        { 3, 2 },
+        { 4, 3 },
+    };
+
+
+    /*
+    * Encrypt pattern (cipher)
+    */
+    for (auto& c : pattern) c = w[(4 - mp[c]) % 4];
+    Ciphertext pattern_encrypt = bgv_seal.encrypt(bgv_seal.encode(pattern));
+
+
+    /*
+    * Calculate
+    */
+    for (auto& c : text) c = w[mp[c]];
+    std::reverse(text.begin(), text.end());
+    Plaintext text_plain = bgv_seal.encode(text);
+
+    vector<int64_t> r = random_gen.get_integer_vector(-p / 2, p / 2, text.size());
+
+    vector<string> hash;
+    hash.reserve(text.size());
+    for (auto& e : r) {
+        hash.push_back(hashing_sha256(to_string(e)));
+    }
+
+    Ciphertext result_encrypt = bgv_seal.multiply(pattern_encrypt, text_plain);
+    result_encrypt = bgv_seal.sub(result_encrypt, bgv_seal.encode(vector<int64_t>(text.size(), pattern.size())));
+    result_encrypt = bgv_seal.multiply(result_encrypt, bgv_seal.encode(vector<int64_t>(1, random_gen.get_integer(1, p / 2))));
+    result_encrypt = bgv_seal.add(result_encrypt, bgv_seal.encode(r));
+
+
+    /*
+    * Find pattern in text
+    */
+    vector<int64_t> pl;
+    vector<int64_t> result = bgv_seal.decode(bgv_seal.decrypt(result_encrypt));
+
+    for (int i = 0; i < text.size(); i++) {
+        if (hashing_sha256(to_string(result[i])) == hash[i]) {
+            pl.push_back((int64_t)text.size() - i - 1);
+        }
+    }
+
+    if (pl.empty()) {
+        cout << endl << "    [ empty ]" << endl << endl;
+    }
+    else {
+        sort(pl.begin(), pl.end());
+        print_vector(pl, pl.size());
+    }
+}
 
 void testing_binary_pattern_matching(const int text_size = 4096, const int pattern_size = 10) {
     cout << endl << "------------------ <Testing pattern matching : text size(" << text_size << "), pattern size(" << pattern_size << ")> ------------------" << endl << endl;
@@ -628,8 +709,13 @@ void testing_pattern_matching(const int text_size = 4096, const int pattern_size
     * Generate random data
     */
     RandomGenerator random_gen;
-    vector<int64_t> text = random_gen.get_integer_vector(0, 4, text_size);
-    vector<int64_t> pattern = random_gen.get_integer_vector(0, 4, pattern_size);
+    vector<int64_t> text = random_gen.get_integer_vector(1, 4, text_size);
+    vector<int64_t> pattern = random_gen.get_integer_vector(1, 4, pattern_size);
+    for (auto& i : random_gen.get_integer_vector(0, text.size() - pattern.size(), random_gen.get_integer(3, 200))) {
+        for (int j = 0; j < pattern.size(); j++) {
+            text[i + j] = pattern[j];
+        }
+    }
 
     cout << "Text:";
     print_vector(text, std::min(10, (int)text.size()));
@@ -646,7 +732,7 @@ void testing_pattern_matching(const int text_size = 4096, const int pattern_size
     /*
     * Testing
     */
-    cout << "- pattern_matching_5" << endl;
+    cout << "- 로테이션" << endl;
     start = chrono::high_resolution_clock::now();
     pattern_matching_5(random_gen, text, pattern);
     end = chrono::high_resolution_clock::now();
@@ -654,9 +740,17 @@ void testing_pattern_matching(const int text_size = 4096, const int pattern_size
     cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;
 
 
-    cout << "- pattern_matching_6" << endl;
+    cout << "- 허프만 + 해쉬" << endl;
     start = chrono::high_resolution_clock::now();
     pattern_matching_6(random_gen, text, pattern);
+    end = chrono::high_resolution_clock::now();
+    elapsed = end - start;
+    cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;
+
+
+    cout << "- 루트오브유니티 + 해쉬" << endl;
+    start = chrono::high_resolution_clock::now();
+    pattern_matching_7(random_gen, text, pattern);
     end = chrono::high_resolution_clock::now();
     elapsed = end - start;
     cout << "    Execution time: " << elapsed.count() << "ms" << endl << endl;
@@ -666,76 +760,126 @@ void testing_pattern_matching(const int text_size = 4096, const int pattern_size
 
 void main()
 {
-  /*  BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, {40, 30, 30, 40}, 35, false)
+    /*  BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, {40, 30, 30, 40}, 35, false)
+          .create_secret_key()
+          .create_public_key()
+          .create_relin_keys()
+          .build();
+
+      int64_t temp = bgv_seal.plain_modulus_value() / 2 + 1;
+      cout << temp << '\n';
+      vector<int64_t> temps({ temp, temp, temp });
+      Plaintext p = bgv_seal.encode(temps);
+      Ciphertext e = bgv_seal.encrypt(p);
+
+      print_vector(bgv_seal.decode(p), 5);
+      print_vector(bgv_seal.decode(bgv_seal.decrypt(e)), 5);
+      print_vector(bgv_seal.decode(bgv_seal.decrypt(bgv_seal.add(e, e))), 5);*/
+
+      /*RandomGenerator random_gen;
+      std::vector<int64_t> data = random_gen.get_integer_vector(0, 25, 20);
+      std::cout << "Origin Data:" << std::endl;
+      for (const auto& val : data) {
+          std::cout << val << " ";
+      }
+      std::cout << std::endl;
+
+
+      // 허프만 인코더 생성
+      Huffman huffman(data);
+
+      // 데이터 인코딩
+      auto [encoded, location] = huffman.encode(data);
+      std::cout << "Encoded Data (0과 1):" << std::endl;
+      for (const auto& bit : encoded) {
+          std::cout << bit;
+      }
+      std::cout << std::endl;
+
+      std::cout << "Location Data:" << std::endl;
+      for (const auto& loc : location) {
+          std::cout << loc;
+      }
+      std::cout << std::endl;
+
+      // 데이터 디코딩
+      std::vector<int64_t> decoded = huffman.decode(encoded);
+      std::cout << "Decoded Data:" << std::endl;
+      for (const auto& val : decoded) {
+          std::cout << val << " ";
+      }
+      std::cout << std::endl;*/
+
+    for (auto& pattern_size : vector<int>{ 5, 10, 20, 30, 40, 50 }) {
+        testing_pattern_matching(3000, pattern_size);
+    }
+
+    for (auto& pattern_size : vector<int>{ 5, 10, 20, 30, 40, 50 }) {
+        // testing_binary_pattern_matching(4096, pattern_size);
+    }
+
+
+/*
+    RandomGenerator random_gen;
+
+    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 35, false)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
         .build();
 
-    int64_t temp = bgv_seal.plain_modulus_value() / 2 + 1;
-    cout << temp << '\n';
-    vector<int64_t> temps({ temp, temp, temp });
-    Plaintext p = bgv_seal.encode(temps);
-    Ciphertext e = bgv_seal.encrypt(p);
+    // p = 34359410689
+    int64_t p = bgv_seal.plain_modulus_value();
 
-    print_vector(bgv_seal.decode(p), 5);
-    print_vector(bgv_seal.decode(bgv_seal.decrypt(e)), 5);
-    print_vector(bgv_seal.decode(bgv_seal.decrypt(bgv_seal.add(e, e))), 5);*/
+    // w = 2793308228
+    vector<int64_t> w = { 1, 2793308228, -1, -2793308228 };
 
-    /*RandomGenerator random_gen;
-    std::vector<int64_t> data = random_gen.get_integer_vector(0, 25, 20);
-    std::cout << "Origin Data:" << std::endl;
-    for (const auto& val : data) {
-        std::cout << val << " ";
-    }
-    std::cout << std::endl;
+    // mapping
+    map<int64_t, int64_t> mp = {
+        { 1, 0 },
+        { 2, 1 }, // 2 -> w^1
+        { 3, 2 },
+        { 4, 3 },
+    };
 
+    // text
+    vector<int64_t> text = { 1, 2, 4, 3, 2, 4 };
+    for (auto& c : text) c = w[mp[c]];
+    Plaintext text_p = bgv_seal.encode(text);
+    cout << "    text";
+    print_vector(bgv_seal.decode(text_p), 6);
 
-    // 허프만 인코더 생성
-    Huffman huffman(data);
+    // pattern
+    vector<int64_t> pattern = { 4, 2, 1 };
+    for (auto& c : pattern) c = w[(4 - mp[c]) % 4];
+    Ciphertext pattern_c = bgv_seal.encrypt(bgv_seal.encode(pattern));
+    cout << "    pattern";
+    print_vector(bgv_seal.decode(bgv_seal.decrypt(pattern_c)), 6);
 
-    // 데이터 인코딩
-    auto [encoded, location] = huffman.encode(data);
-    std::cout << "Encoded Data (0과 1):" << std::endl;
-    for (const auto& bit : encoded) {
-        std::cout << bit;
-    }
-    std::cout << std::endl;
+    // t * p
+    cout << "    t * p";
+    Ciphertext result = bgv_seal.multiply(pattern_c, text_p);
+    print_vector(bgv_seal.decode(bgv_seal.decrypt(result)), 6);
 
-    std::cout << "Location Data:" << std::endl;
-    for (const auto& loc : location) {
-        std::cout << loc;
-    }
-    std::cout << std::endl;
+    // t * p - n
+    cout << "    t * p - n";
+    vector<int64_t> n(6, 3);
+    result = bgv_seal.sub(result, bgv_seal.encode(n));
+    print_vector(bgv_seal.decode(bgv_seal.decrypt(result)), 6);
 
-    // 데이터 디코딩
-    std::vector<int64_t> decoded = huffman.decode(encoded);
-    std::cout << "Decoded Data:" << std::endl;
-    for (const auto& val : decoded) {
-        std::cout << val << " ";
-    }
-    std::cout << std::endl;*/
-
-    for (auto& pattern_size : vector<int>{ 5, 10, 20, 30, 40, 50 }) {
-        //testing_pattern_matching(3000, pattern_size);
-    }
-
-    for (auto& pattern_size : vector<int>{ 5, 10, 20, 30, 40, 50 }) {
-        testing_binary_pattern_matching(4096, pattern_size);
-    }
-
-    /*    BGVSeal& bgv_seal = BGVBuilder(seal::sec_level_type::tc128, 8192, {40, 30, 30, 40}, 35, false)
-            .create_secret_key()
-            .create_public_key()
-            .create_relin_keys()
-            .build();
+    // (t * p - n) * a
+    cout << "    (t * p - n) * a";
+    vector<int64_t> a(1, random_gen.get_integer(-p / 2, p / 2));
+    result = bgv_seal.multiply(result, bgv_seal.encode(a));
+    print_vector(bgv_seal.decode(bgv_seal.decrypt(result)), 6);
 
 
-        vector<int64_t> v1 = { 0, 0, 0, -16, 32, 64 };
-        vector<int64_t> v2 = { 0, 0, 0 };
-
-        Ciphertext c1 = bgv_seal.encrypt(bgv_seal.encode(v1));
-        Ciphertext c2 = bgv_seal.encrypt(bgv_seal.encode(v2));
-
-        print_vector(bgv_seal.decode(bgv_seal.decrypt(bgv_seal.multiply(c1, c2))), 10);*/
+    // (t * p - n) * a + r
+    cout << "(t * p - n) * a + r";
+    vector<int64_t> r = random_gen.get_integer_vector(-p / 2, p / 2, 6);
+    result = bgv_seal.add(result, bgv_seal.encode(r));
+    print_vector(bgv_seal.decode(bgv_seal.decrypt(result)), 6);*/
 }
+
+
+// 34359410689
