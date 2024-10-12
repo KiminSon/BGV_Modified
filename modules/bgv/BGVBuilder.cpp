@@ -1,15 +1,21 @@
 // BGVBuilder.cpp
 #include "BGVBuilder.h"
 
-BGVBuilder::BGVBuilder(const seal::sec_level_type sec_level, const size_t poly_modulus_degree, const std::vector<int> bit_sizes, const bool use_ntt) {
-    if (bit_sizes.size() == 0) {
+BGVBuilder::BGVBuilder(
+    const seal::sec_level_type sec_level,
+    const size_t poly_modulus_degree,
+    const std::vector<int> coeff_bit_sizes,
+    const int plain_bit_size,
+    const bool use_ntt)
+{
+    if (coeff_bit_sizes.size() == 0) {
         throw std::invalid_argument("bit_sizes vector is empty");
     }
     else {
         int total_bit_size = 0;
         int max_bit_size = seal::CoeffModulus::MaxBitCount(poly_modulus_degree, sec_level);
 
-        for (auto& bit_size : bit_sizes) {
+        for (auto& bit_size : coeff_bit_sizes) {
             total_bit_size += bit_size;
         }
 
@@ -19,8 +25,13 @@ BGVBuilder::BGVBuilder(const seal::sec_level_type sec_level, const size_t poly_m
 
         seal::EncryptionParameters context_param(seal::scheme_type::bgv);
         context_param.set_poly_modulus_degree(poly_modulus_degree);
-        context_param.set_coeff_modulus(seal::CoeffModulus::Create(poly_modulus_degree, bit_sizes));
-        context_param.set_plain_modulus(seal::PlainModulus::Batching(poly_modulus_degree, 20));
+        context_param.set_coeff_modulus(seal::CoeffModulus::Create(poly_modulus_degree, coeff_bit_sizes));
+        context_param.set_plain_modulus(seal::PlainModulus::Batching(poly_modulus_degree, plain_bit_size));
+
+        //context_param.set_plain_modulus(seal::PlainModulus::Batching::)
+         
+        //auto temp = seal::PlainModulus::Batching(poly_modulus_degree, plain_bit_size);
+        //context_param.set_plain_modulus(plain_bit_size);
 
         use_ntt_ = use_ntt;
         context_ = std::make_unique<seal::SEALContext>(context_param, true, sec_level);

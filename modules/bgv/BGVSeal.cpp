@@ -24,6 +24,23 @@ BGVSeal::BGVSeal(
 
 }
 
+int64_t BGVSeal::plain_modulus_prime() {
+    return context_->key_context_data()->parms().plain_modulus().value();
+}
+
+std::vector<uint64_t> BGVSeal::plain_modulus_roots(int n, int k) {
+    std::vector<uint64_t> roots;
+
+    if (n < 1 || (n & (n - 1)) != 0) {
+        return roots;
+    }
+
+    seal::Modulus modulus = context_->key_context_data()->parms().plain_modulus();
+    seal::util::try_primitive_roots(n, modulus, k, roots);
+
+    return roots;
+}
+
 seal::Plaintext BGVSeal::encode(const std::vector<int64_t>& vector) {
     seal::Plaintext plain;
     encoder_->encode(vector, plain);
@@ -49,69 +66,64 @@ seal::Plaintext BGVSeal::decrypt(const seal::Ciphertext& cipher) {
 }
 
 seal::Ciphertext BGVSeal::add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) {
-    seal::Ciphertext cipher1 = ciphertext1;
-    seal::Ciphertext cipher2 = ciphertext2;
-
-    evaluator_->add_inplace(cipher1, cipher2);
-
-    return cipher1;
+    seal::Ciphertext result;
+    evaluator_->add(ciphertext1, ciphertext2, result);
+    return result;
 }
 
 seal::Ciphertext BGVSeal::add(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) {
-    seal::Ciphertext cipher = ciphertext;
-    seal::Plaintext plain = plaintext;
-
-    evaluator_->add_plain_inplace(cipher, plain);
-
-    return cipher;
+    seal::Ciphertext result;
+    evaluator_->add_plain(ciphertext, plaintext, result);
+    return result;
 }
 
 seal::Ciphertext BGVSeal::sub(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) {
-    seal::Ciphertext cipher1 = ciphertext1;
-    seal::Ciphertext cipher2 = ciphertext2;
-
-    evaluator_->sub_inplace(cipher1, cipher2);
-
-    return cipher1;
+    seal::Ciphertext result;
+    evaluator_->sub(ciphertext1, ciphertext2, result);
+    return result;
 }
 
 seal::Ciphertext BGVSeal::sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) {
-    seal::Ciphertext cipher = ciphertext;
-    seal::Plaintext plain = plaintext;
-
-    evaluator_->sub_plain_inplace(cipher, plain);
-
-    return cipher;
+    seal::Ciphertext result;
+    evaluator_->sub_plain(ciphertext, plaintext, result);
+    return result;
 }
 
 seal::Ciphertext BGVSeal::multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2) {
-    seal::Ciphertext cipher1 = ciphertext1;
-    seal::Ciphertext cipher2 = ciphertext2;
-
-    evaluator_->multiply_inplace(cipher1, cipher2);
-    evaluator_->relinearize_inplace(cipher1, relin_keys_);
-
-    return cipher1;
+    seal::Ciphertext result;
+    evaluator_->multiply(ciphertext1, ciphertext2, result);
+    evaluator_->relinearize_inplace(result, relin_keys_);
+    return result;
 }
 
 seal::Ciphertext BGVSeal::multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext) {
-    seal::Ciphertext cipher = ciphertext;
-    seal::Plaintext plain = plaintext;
-
-    evaluator_->multiply_plain_inplace(cipher, plain);
-    evaluator_->relinearize_inplace(cipher, relin_keys_);
-
-    return cipher;
+    seal::Ciphertext result;
+    evaluator_->multiply_plain(ciphertext, plaintext, result);
+    evaluator_->relinearize_inplace(result, relin_keys_);
+    return result;
 }
 
 seal::Ciphertext BGVSeal::negate(const seal::Ciphertext& ciphertext) {
-    seal::Ciphertext cipher = ciphertext;
-    evaluator_->negate_inplace(cipher);
-    return cipher;
+    seal::Ciphertext result;
+    evaluator_->negate(ciphertext, result);
+    return result;
 }
 
 seal::Ciphertext BGVSeal::rotate(const seal::Ciphertext& ciphertext, const int step) {
-    seal::Ciphertext cipher = ciphertext;
-    evaluator_->rotate_rows_inplace(cipher, step, galois_keys_);
-    return cipher;
+    seal::Ciphertext result;
+    evaluator_->rotate_rows(ciphertext, step, galois_keys_, result);
+    return result;
+}
+
+seal::Ciphertext BGVSeal::range_sum(const seal::Ciphertext& ciphertext, const int range_size) {
+    seal::Ciphertext result = ciphertext;
+    seal::Ciphertext rotated;
+    int rotation_count = ceil(log2(range_size));
+
+    for (int i = 0, step = 1; i < rotation_count; i++, step <<= 1) {
+        evaluator_->rotate_rows(result, step, galois_keys_, rotated);
+        evaluator_->add(result, rotated, result);
+    }
+
+    return result;
 }

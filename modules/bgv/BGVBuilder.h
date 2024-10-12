@@ -8,7 +8,13 @@
 
 class BGVBuilder {
 public:
-    BGVBuilder(const seal::sec_level_type sec_level, const size_t poly_modulus_degree, const std::vector<int> bit_sizes, const bool use_ntt);
+    BGVBuilder(
+        const seal::sec_level_type sec_level,
+        const size_t poly_modulus_degree,
+        const std::vector<int> coeff_bit_sizes,
+        const int plain_bit_size,
+        const bool use_ntt
+    );
 
     BGVBuilder& create_secret_key();
 

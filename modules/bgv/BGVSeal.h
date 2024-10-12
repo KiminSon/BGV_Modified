@@ -31,6 +31,10 @@ public:
     void params_matching(seal::Ciphertext& ciphertext1, seal::Ciphertext& ciphertext2);
 
     void params_matching(seal::Ciphertext& ciphertext, seal::Plaintext& plaintext);
+    
+    int64_t plain_modulus_prime();
+
+    std::vector<uint64_t> plain_modulus_roots(int n, int k);
 
     seal::Ciphertext add(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2);
 
@@ -47,6 +51,8 @@ public:
     seal::Ciphertext negate(const seal::Ciphertext& ciphertext);
 
     seal::Ciphertext rotate(const seal::Ciphertext& ciphertext, const int step);
+
+    seal::Ciphertext range_sum(const seal::Ciphertext& ciphertext, const int range_size);
 
 private:
     std::unique_ptr<seal::SEALContext> context_;
