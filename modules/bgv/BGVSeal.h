@@ -32,7 +32,7 @@ public:
 
     void params_matching(seal::Ciphertext& ciphertext, seal::Plaintext& plaintext);
     
-    int64_t plain_modulus_prime();
+    uint64_t plain_modulus_prime();
 
     std::vector<uint64_t> plain_modulus_roots(int n, int k);
 

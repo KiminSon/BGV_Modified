@@ -24,7 +24,7 @@ BGVSeal::BGVSeal(
 
 }
 
-int64_t BGVSeal::plain_modulus_prime() {
+uint64_t BGVSeal::plain_modulus_prime() {
     return context_->key_context_data()->parms().plain_modulus().value();
 }
 
