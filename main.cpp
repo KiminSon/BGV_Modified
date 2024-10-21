@@ -6,6 +6,7 @@
 #include "modules/bgv/BGVSeal.h"
 #include "modules/random/RandomGenerator.h"
 #include "modules/algorithm/Huffman.h"
+#include "modules/algorithm/FFT.h"
 #include "modules/simulator/MatchingSimulator.h"
 #include <openssl/sha.h>
 #include <iostream>
@@ -199,7 +200,7 @@ std::unordered_map<uint64_t, double_t> count_ordered_permutations_mod_prob(
     const std::unordered_map<uint64_t, uint64_t>& target_mods)
 {
     uint64_t total_freq = 0;
-    for (uint64_t freq : frequencies) {
+    for (const uint64_t& freq : frequencies) {
         total_freq += freq;
     }
 
@@ -240,13 +241,57 @@ std::unordered_map<uint64_t, double_t> count_ordered_permutations_mod_prob(
     return counts;
 }
 
+double_t compute_mixing_time(const vector<uint64_t>& powers, const vector<uint64_t>& frequencies, uint64_t p, double_t epsilon = 0.01) {
+    uint64_t total = 0;
+    for (const auto& freq : frequencies) {
+        total += freq;
+    }
+
+    // 빈도수를 확률로 정규화
+    vector<double_t> mu(p, 0.0);
+    for (size_t i = 0; i < powers.size(); ++i) {
+        mu[powers[i]] += static_cast<double_t>(frequencies[i]) / static_cast<double_t>(total);
+    }
+
+    // FFT 객체 생성 및 FFT 수행
+    FFT fft;
+    vector<complex<double_t>> eigenvalues = fft.compute_fft(mu);
+
+    // 고유값의 절댓값 계산
+    vector<double_t> abs_eigenvalues;
+    abs_eigenvalues.reserve(p);
+
+    for (int i = 0; i < p; ++i) {
+        double_t magnitude = abs(eigenvalues[i]);
+        abs_eigenvalues.push_back(magnitude);
+    }
+
+    // 두 번째로 큰 고유값 찾기 (k >=1)
+    double_t second_largest_eigenvalue = 0.0;
+    if (p > 1) {
+        second_largest_eigenvalue = *max_element(abs_eigenvalues.begin() + 1, abs_eigenvalues.end());
+    }
+
+    // 스펙트럼 갭 계산
+    double_t spectral_gap = 1.0 - second_largest_eigenvalue;
+
+    if (spectral_gap <= 0.0) {
+        throw runtime_error("스펙트럼 갭이 0 이하입니다. 랜덤 워크가 혼합되지 않습니다.");
+    }
+
+    // 혼합 시간 계산
+    double_t mixing_time = log(1.0 / epsilon) / spectral_gap;
+
+    return mixing_time;
+}
+
 void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t m_begin, uint64_t m_end) {
     // random module
     RandomGenerator rand;
 
 
     // create plain modulus
-    seal::Modulus plain_modulus = seal::PlainModulus::Batching(128, 26);
+    seal::Modulus plain_modulus = seal::PlainModulus::Batching(128, 28);
 
 
     // get plain modulus prime
@@ -269,36 +314,45 @@ void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t m_begin, uint
     while (powers.size() < n) {
         powers.push_back(power);
         power = (power * root) % prime;
-        cout << power << ' ';
     }
-    cout << '\n';
 
 
     // calculate prob (병렬 처리)
+    std::vector<uint64_t> original_set_frequencies;
+    std::vector<uint64_t> balanced_sub_set_frequencies;
+    std::vector<uint64_t> unbalanced_sub_set_frequencies;
+
     std::unordered_map<uint64_t, double_t> original_set;
     std::unordered_map<uint64_t, double_t> balanced_subset;
     std::unordered_map<uint64_t, double_t> unbalanced_subset;
+
+    double_t original_set_mixing_time = 0.0;
+    double_t balanced_subset_mixing_time = 0.0;
+    double_t unbalanced_subset_mixing_time = 0.0;
 
     std::unordered_map<uint64_t, uint64_t> target_mods;
     for (uint64_t m = m_begin; m <= m_end; m++) {
         target_mods.insert({ m, m % prime });
     }
  
-    std::vector<uint64_t> original_set_frequencies(n, 1);
 
     // If n ans unique_int_cnt are same, we don't have to calculate subset case
     if (n == unique_int_cnt) {
+        original_set_frequencies.assign(n, 1);
+        original_set_mixing_time = compute_mixing_time(powers, original_set_frequencies, prime);
         original_set = count_ordered_permutations_mod_prob(powers, original_set_frequencies, m_begin, m_end, prime, target_mods);
     }
     else {   
-        std::vector<uint64_t> balanced_sub_set_frequencies = calculate_mod_frequencies_from_balanced_sets(unique_int_cnt, n);
-        std::vector<uint64_t> unbalanced_sub_set_frequencies = calculate_mod_frequencies_from_unbalanced_sets(unique_int_cnt, n, 0);
-
-        for (auto& e : balanced_sub_set_frequencies) cout << e << ' '; cout << '\n';
-        for (auto& e : unbalanced_sub_set_frequencies) cout << e << ' '; cout << '\n';
+        original_set_frequencies.assign(n, 1);
+        balanced_sub_set_frequencies = calculate_mod_frequencies_from_balanced_sets(unique_int_cnt, n);
+        unbalanced_sub_set_frequencies = calculate_mod_frequencies_from_unbalanced_sets(unique_int_cnt, n, 0);
 
         unsigned int num_cores = std::thread::hardware_concurrency();
         std::cout << "Number of CPU cores: " << num_cores << '\n';
+
+        original_set_mixing_time = compute_mixing_time(powers, original_set_frequencies, prime);
+        balanced_subset_mixing_time = compute_mixing_time(powers, balanced_sub_set_frequencies, prime);
+        unbalanced_subset_mixing_time = compute_mixing_time(powers, unbalanced_sub_set_frequencies, prime);
 
         auto future_original_set = std::async(std::launch::async, count_ordered_permutations_mod_prob, powers, original_set_frequencies, m_begin, m_end, prime, target_mods);
         auto future_balanced_subset = std::async(std::launch::async, count_ordered_permutations_mod_prob, powers, balanced_sub_set_frequencies, m_begin, m_end, prime, target_mods);
@@ -316,7 +370,30 @@ void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t m_begin, uint
     std::ofstream out(filename.str());
 
 
-    // caculate probability
+    // write result
+    out << "    For unique_int_cnt = " << unique_int_cnt << ", n = " << n << ", p = " << prime << ": " << '\n';
+    out << "      Primitive Root = " << root << '\n';
+    out << "      Powers         = [";
+    for (auto& e : powers) out << e << ", "; out << "]\n";
+
+    out << "    For unique_int_cnt = " << unique_int_cnt << ", n = " << n << ", p = " << prime << ": " << '\n';
+    out << "      Original Set Frequencies      = [";
+    for (auto& e : original_set_frequencies) out << e << ", "; out << "]\n";
+
+    out << "      Balanced Subset Frequencies   = [";
+    for (auto& e : balanced_sub_set_frequencies) out << e << ", "; out << "]\n";
+
+    out << "      Unbalanced Subset Frequencies = [";
+    for (auto& e : unbalanced_sub_set_frequencies) out << e << ", "; out << "]\n";
+
+
+    out << std::fixed << std::setprecision(std::numeric_limits<double>::max_digits10);
+    out << "    For unique_int_cnt = " << unique_int_cnt << ", n = " << n << ", p = " << prime << ": " << '\n';
+    out << "      Original Set Mixing Time      = " << original_set_mixing_time << '\n';
+    out << "      Balanced Subset Mixing Time   = " << balanced_subset_mixing_time << '\n';
+    out << "      Unbalanced Subset Mixing Time = " << unbalanced_subset_mixing_time << '\n';
+
+
     for (uint64_t m = m_begin; m <= m_end; m++) {
         auto prob_original_set = original_set[m] * 100.0;
         auto prob_balanced_subset = balanced_subset[m] * 100.0;
@@ -329,19 +406,16 @@ void probabiity_of_root_of_unity(uint64_t unique_int_cnt, uint64_t m_begin, uint
         auto prob_theoretical_single_set = static_cast<double_t>(1) / (static_cast<double_t>(prime) / 100.0);
         auto prob_theoretical_both_set = pow(prob_theoretical_single_set, 2) / 100.0;
 
-
-        out << std::fixed << std::setprecision(std::numeric_limits<double>::max_digits10);
-
         out << "    For m = " << m << ", unique_int_cnt = " << unique_int_cnt << ", n = " << n << ", p = " << prime << ": " << '\n';
-        out << "      Convergence Single Probability  = " << prob_theoretical_single_set << '\n';
-        out << "      Original Probability            = " << prob_original_set << '\n';
-        out << "      Balanced Set Probability        = " << prob_balanced_subset << '\n';
-        out << "      Unbalanced Set Probability      = " << prob_unbalanced_subset << '\n';
+        out << "      Convergence Single Probability     = " << prob_theoretical_single_set << '\n';
+        out << "      Original Set Probability           = " << prob_original_set << '\n';
+        out << "      Balanced Subset Probability        = " << prob_balanced_subset << '\n';
+        out << "      Unbalanced Subset Probability      = " << prob_unbalanced_subset << '\n';
 
-        out << "      Convergence Both Probability    = " << prob_theoretical_both_set << '\n';
-        out << "      Both Original Probability       = " << both_prob_original_set << '\n';
-        out << "      Both Balanced Set Probability   = " << both_prob_balanced_subset << '\n';
-        out << "      Both Unbalanced Set Probability = " << both_prob_unbalanced_subset << '\n';
+        out << "      Convergence Both Probability       = " << prob_theoretical_both_set << '\n';
+        out << "      Both Original Set Probability      = " << both_prob_original_set << '\n';
+        out << "      Both Balanced Subset Probability   = " << both_prob_balanced_subset << '\n';
+        out << "      Both Unbalanced Subset Probability = " << both_prob_unbalanced_subset << '\n';
     }
 }
 
@@ -349,7 +423,7 @@ void main()
 {
     std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
 
-    probabiity_of_root_of_unity(128, 2, 100);
+    probabiity_of_root_of_unity(26, 2, 100);
 
     std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
     std::chrono::duration<double, std::milli> elapsed = end - start;
