@@ -5,10 +5,10 @@
 #include <vector>
 #include <memory>
 
-class BGVSeal
+class SEALHelper
 {
 public:
-    BGVSeal(
+    SEALHelper(
         std::unique_ptr<seal::SEALContext> context,
         std::unique_ptr<seal::BatchEncoder> encoder,
         std::unique_ptr<seal::Encryptor> encryptor,
@@ -44,9 +44,9 @@ public:
 
     seal::Ciphertext sub(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext);
 
-    seal::Ciphertext multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2);
+    seal::Ciphertext multiply(const seal::Ciphertext& ciphertext1, const seal::Ciphertext& ciphertext2, const bool use_mod_switch = true);
 
-    seal::Ciphertext multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext);
+    seal::Ciphertext multiply(const seal::Ciphertext& ciphertext, const seal::Plaintext& plaintext, const bool use_mod_switch = true);
 
     seal::Ciphertext negate(const seal::Ciphertext& ciphertext);
 

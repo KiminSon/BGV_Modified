@@ -1,4 +1,4 @@
-// BGVBuilder.h
+// SEALBuilder.h
 #pragma once
 
 #include "seal/seal.h"
@@ -6,9 +6,10 @@
 #include <vector>
 #include <memory>
 
-class BGVBuilder {
+class SEALBuilder {
 public:
-    BGVBuilder(
+    SEALBuilder(
+        const seal::scheme_type scheme_type,
         const seal::sec_level_type sec_level,
         const size_t poly_modulus_degree,
         const std::vector<int> coeff_bit_sizes,
@@ -16,15 +17,15 @@ public:
         const bool use_ntt
     );
 
-    BGVBuilder& create_secret_key();
+    SEALBuilder& create_secret_key();
 
-    BGVBuilder& create_public_key();
+    SEALBuilder& create_public_key();
 
-    BGVBuilder& create_relin_keys();
+    SEALBuilder& create_relin_keys();
 
-    BGVBuilder& create_galois_keys(std::vector<int> steps = {});
+    SEALBuilder& create_galois_keys(std::vector<int> steps = {});
 
-    BGVSeal& build();
+    SEALHelper& build();
 
 private:
     bool use_ntt_;

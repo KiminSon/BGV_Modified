@@ -124,7 +124,7 @@ void MatchingSimulator::binary_matching_hash(std::vector<int64_t> text, std::vec
 
 
     // create bgv
-    BGVSeal& bgv = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
+    SEALHelper& bgv = SEALBuilder(seal::scheme_type::bgv, seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
@@ -201,7 +201,7 @@ void MatchingSimulator::binary_matching_hash_rotation(std::vector<int64_t> text,
 
 
     // create bgv
-    BGVSeal& bgv = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
+    SEALHelper& bgv = SEALBuilder(seal::scheme_type::bgv, seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
@@ -292,7 +292,7 @@ void MatchingSimulator::integer_matching_hash_primitive_root(std::vector<int64_t
 
 
     // create bgv
-    BGVSeal& bgv = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
+    SEALHelper& bgv = SEALBuilder(seal::scheme_type::bgv, seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
@@ -414,7 +414,7 @@ void MatchingSimulator::integer_matching_hash_rotation(std::vector<int64_t> text
 
 
     // create bgv
-    BGVSeal& bgv = BGVBuilder(seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
+    SEALHelper& bgv = SEALBuilder(seal::scheme_type::bgv, seal::sec_level_type::tc128, 8192, { 40, 30, 30, 30, 40 }, 31, false)
         .create_secret_key()
         .create_public_key()
         .create_relin_keys()
