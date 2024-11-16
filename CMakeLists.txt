@@ -6,15 +6,13 @@ cmake_minimum_required (VERSION 3.8)
 project ("bgv_modified")
 
 # 라이브러리 경로 설정
-set(SEAL_DIR "C:/Users/user/Desktop/mpc/SEAL/build")
-set(OPENSSL_ROOT_DIR "C:/Program Files/OpenSSL-Win64/lib/VC/x64/MD")
+set(SEAL_DIR "C:/Users/kimin/Documents/GitHub/DICESEAL/build")
 
 # 라이브러리를 찾습니다. 이 줄을 추가하세요.
 find_package(SEAL REQUIRED PATHS ${SEAL_DIR})
-find_package(OpenSSL REQUIRED)
 
 # 이 프로젝트의 실행 파일에 소스를 추가합니다.
-add_executable (bgv_modified "main.cpp" "examples.h" "bgv_modified.h" "modules/bgv/BGVBuilder.h" "modules/bgv/BGVBuilder.cpp" "modules/bgv/BGVSeal.h" "modules/bgv/BGVSeal.cpp" "modules/random/RandomGenerator.h" "modules/random/RandomGenerator.cpp" "modules/algorithm/Huffman.h" "modules/algorithm/Huffman.cpp" "modules/simulator/MatchingSimulator.cpp" "modules/simulator/MatchingSimulator.h" "modules/algorithm/FFT.h" "modules/algorithm/FFT.cpp")
+add_executable (bgv_modified "main.cpp" "examples.h" "bgv_modified.h" "modules/bgv/BGVBuilder.h" "modules/bgv/BGVBuilder.cpp" "modules/bgv/BGVSeal.h" "modules/bgv/BGVSeal.cpp" "modules/random/RandomGenerator.h" "modules/random/RandomGenerator.cpp")
 
 # 라이브러리를 프로젝트에 링크합니다. 이 줄을 추가하세요.
 target_link_libraries(bgv_modified PRIVATE SEAL::seal)
