@@ -1,4 +1,4 @@
-# BGV_Modified
+# PSI(Private Set Intersection)
  
 ![슬라이드1.PNG](img/%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C1.PNG)
 ![슬라이드2.PNG](img/%EC%8A%AC%EB%9D%BC%EC%9D%B4%EB%93%9C2.PNG)
